@@ -11,10 +11,4 @@ class KeypointModel(nn.Module):
         
 
     def forward(self, x):
-        
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
-print(f"Using {device} device")
-
-model = KeypointModel().to(device)
-print(model)
