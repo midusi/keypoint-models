@@ -37,13 +37,13 @@ class LSA_Dataset(VisionDataset):
         self.samples = [(clip.parent / (clip.name[:-3] + 'json')) for clip in sorted(Path(root).glob('**/*.mp4'), key=lambda p: (str(p.parent), int(str(p.name)[:-4])))]
         
         self.tokenizer = get_tokenizer('spacy', language='es_core_news_sm')
-        UNK_IDX, PAD_IDX, BOS_IDX, EOS_IDX = 0, 1, 2, 3
         special_symbols = ['<unk>', '<pad>', '<bos>', '<eos>']
         self.vocab = build_vocab_from_iterator(yield_tokens(self.samples, self.tokenizer),
                                                     min_freq=1,
                                                     specials=special_symbols,
                                                     special_first=True)
-        self.vocab.set_default_index(UNK_IDX)
+        # by default returns <unk> index
+        self.vocab.set_default_index(0)
 
         self.load_videos = load_videos
         self.load_keypoints = load_keypoints
