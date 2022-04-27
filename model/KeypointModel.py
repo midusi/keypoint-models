@@ -1,32 +1,49 @@
 from typing import List
-from torch import Tensor, nn, stack
-from torch.nn.functional import relu
-import torch
+from torch import Tensor, nn
 
-from model.PositionalEncoding import PositionalEncoding
+from model.modules.KeypointsEmbedding import KeypointsEmbedding
+from model.modules.PositionalEncoding import PositionalEncoding
+from model.modules.TokenEmbedding import TokenEmbedding
 
 
 class KeypointModel(nn.Module):
 
-    def __init__(self, inp_max_len: int, tgt_max_len: int):
+    def __init__(self,
+                src_max_len: int,
+                tgt_max_len: int,
+                keys_amount: int,
+                tgt_vocab_size: int,
+                kernel_size: int = 5,
+                emb_size: int = 64,
+                keys_initial_emb_size: int = 128,
+                ):
         super(KeypointModel, self).__init__()
 
         # in_features is the result of flattening the input of (x,y,c).(k1, ..., k42)
-        self.fc = nn.Linear(in_features=126, out_features=64)
-        kernel_size = 5
-        self.conv1d = nn.Conv1d(in_channels=64, out_channels=32, kernel_size=kernel_size)
-        self.pe = PositionalEncoding(emb_size=32, max_len=(inp_max_len - kernel_size + 1))
-        self.transformer = nn.Transformer()
+        self.keys_emb = KeypointsEmbedding(keys_amount=keys_amount, kernel_size=kernel_size, emb_size=emb_size, keys_initial_emb_size=keys_initial_emb_size)
+        self.src_pe = PositionalEncoding(emb_size=emb_size, max_len=(src_max_len - kernel_size + 1))
+        self.tgt_tok_emb = TokenEmbedding(tgt_vocab_size, emb_size)
+        self.tgt_pe = PositionalEncoding(emb_size=emb_size, max_len=tgt_max_len)
+        self.transformer = nn.Transformer(d_model=emb_size)
+        self.generator = nn.Linear(emb_size, tgt_vocab_size)
         
 
-    def forward(self, inp: List[Tensor], tgt: Tensor):
-        # flatten and apply fc frame by frame, then stack the frames and permute dims for conv
-        x = stack([relu(self.fc(torch.flatten(frame))) for frame in inp]).permute(1,0)
-        # unsqueeze adds dimention representing the batch CHEQUEAR
-        x = self.conv1d(x.unsqueeze(0))[0].permute(1,0)
-        # unsqueeze adds dimention representing the batch CHEQUEAR
-        x = x.unsqueeze(1)
-        x = self.pe(x)
-        #x = self.transformer(x)
+    def forward(self,
+                src: List[Tensor],
+                tgt: Tensor,
+                src_mask: Tensor,
+                tgt_mask: Tensor,
+                src_padding_mask: Tensor,
+                tgt_padding_mask: Tensor,
+                memory_key_padding_mask: Tensor):
+        src_emb = self.src_pe(self.keys_emb(src))
+        tgt_emb = self.tgt_pe(self.tgt_tok_emb(tgt))
+        outs = self.transformer(src_emb, tgt_emb, src_mask, tgt_mask, None,
+                                src_padding_mask, tgt_padding_mask, memory_key_padding_mask)
+        return self.generator(outs)
 
-        return x
+    def encode(self, src: Tensor, src_mask: Tensor):
+        return self.transformer.encoder(self.src_pe(self.keys_emb(src)), src_mask)
+
+    def decode(self, tgt: Tensor, memory: Tensor, tgt_mask: Tensor):
+        return self.transformer.decoder(self.tgt_pe(self.tgt_tok_emb(tgt)), memory, tgt_mask)

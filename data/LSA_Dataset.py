@@ -39,11 +39,12 @@ class LSA_Dataset(VisionDataset):
         self.tokenizer = get_tokenizer('spacy', language='es_core_news_sm')
         special_symbols = ['<unk>', '<pad>', '<bos>', '<eos>']
         self.vocab = build_vocab_from_iterator(yield_tokens(self.samples, self.tokenizer),
-                                                    min_freq=1,
-                                                    specials=special_symbols,
-                                                    special_first=True)
+                                                min_freq=1,
+                                                specials=special_symbols,
+                                                special_first=True)
         # by default returns <unk> index
         self.vocab.set_default_index(0)
+        self.max_seq_len = max(map(len, yield_tokens(self.samples, self.tokenizer)))
 
         self.load_videos = load_videos
         self.load_keypoints = load_keypoints

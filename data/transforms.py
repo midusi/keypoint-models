@@ -8,7 +8,7 @@ from torch import Tensor
 from torchvision.transforms.functional import crop, resize
 
 
-def get_roi_selector_transform(height: int, width: int) -> Callable[[Tensor], Tensor]:
+def get_roi_selector_transform(height: int, width: int) -> Callable[[Tensor, Box], Tensor]:
     '''Given height and width, returns a frame-level transform that crops a given roi from the frame and resizes it to to the desired values keeping the aspect ratio and padding with zeros if necessary'''
     def roi_selector_transform(img: Tensor, box: Box) -> Tensor:
         img = crop(img, int(box['y1']),int(box['x1']),int(box['height']),int(box['width']))
@@ -36,7 +36,16 @@ def get_frames_reduction_transform(max_frames: int) -> Callable[[Sequence[T]], L
         return frames
     return frames_reduction_transform
 
-def keypoint_format_transform(keypoint_data: KeypointData) -> Tensor:
-    return Tensor([[
-        k for j,k in enumerate(keypoint_data['keypoints']) if (j%3) == i and int(j/3) > 93
-    ] for i in range(3)])
+def get_keypoint_format_transform(keypoints_to_use: List[int]) -> Callable[[KeypointData], Tensor]:
+    def keypoint_format_transform(keypoint_data: KeypointData) -> Tensor:
+        return Tensor([[
+            k for j,k in enumerate(keypoint_data['keypoints']) if (j%3) == i and int(j/3) in keypoints_to_use
+        ] for i in range(3)])
+    return keypoint_format_transform
+
+def get_text_to_tensor_transform(bos_idx: int, eos_idx: int) -> Callable[[List[int]], Tensor]:
+    def text_to_tensor_transform(token_ids: List[int]) -> Tensor:
+        return torch.cat((torch.tensor([bos_idx]),
+                        torch.tensor(token_ids),
+                        torch.tensor([eos_idx])))
+    return text_to_tensor_transform
