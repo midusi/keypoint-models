@@ -38,5 +38,5 @@ def get_frames_reduction_transform(max_frames: int) -> Callable[[Sequence[T]], L
 
 def keypoint_format_transform(keypoint_data: KeypointData) -> Tensor:
     return Tensor([[
-        k for k in keypoint_data['keypoints'] if (k%3) == i
+        k for j,k in enumerate(keypoint_data['keypoints']) if (j%3) == i and int(j/3) > 93
     ] for i in range(3)])

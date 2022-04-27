@@ -3,7 +3,7 @@ from torch.utils.data import DataLoader
 
 from data.LSA_Dataset import LSA_Dataset
 from data.transforms import get_frames_reduction_transform
-from model.model_keys import KeypointModel
+from model.KeypointModel import KeypointModel
 
 
 def train():

@@ -1,32 +1,23 @@
 import json
 from pathlib import Path
 
-from typing import Sequence, List, Iterator, Callable, Optional
+from typing import Sequence, List, Iterator, Callable, Optional, Generator
 from type_hints import ClipData, ClipSample, SignerData, KeypointData, T, KEYPOINT_FORMAT
 
 from torch import stack, Tensor
 from torchvision.io import VideoReader
 from torchvision.datasets import VisionDataset
-
-from tokenizers import Tokenizer
-from tokenizers.models import BPE
-from tokenizers.trainers import BpeTrainer
-from tokenizers.pre_tokenizers import Whitespace
-from tokenizers.processors import TemplateProcessing
+from torchtext.data.utils import get_tokenizer
+from torchtext.vocab import build_vocab_from_iterator
 
 from helpers.get_clip_paths import get_clip_paths
 
 
-def get_bpe_tokenizer(corpus: Sequence[str]) -> Tokenizer:
-    tokenizer = Tokenizer(BPE(unk_token='[UNK]'))
-    tokenizer.pre_tokenizer = Whitespace()
-    trainer = BpeTrainer(special_tokens=['[UNK]', '[SEP]'])
-    tokenizer.train_from_iterator(corpus, trainer)
-    #tokenizer.post_processor = TemplateProcessing(
-    #    single="$0 [SEP]",
-    #    special_tokens=[("[SEP]", tokenizer.token_to_id("[SEP]"))],
-    #)
-    return tokenizer
+def yield_tokens(samples: List[Path], tokenizer) -> Generator:
+    for sample in samples:
+        with sample.open() as data_file:
+            data: ClipData = json.load(data_file)
+            yield tokenizer(data['label'])
 
 class LSA_Dataset(VisionDataset):
 
@@ -44,13 +35,15 @@ class LSA_Dataset(VisionDataset):
 
         # samples stores metadata's file path for all samples
         self.samples = [(clip.parent / (clip.name[:-3] + 'json')) for clip in sorted(Path(root).glob('**/*.mp4'), key=lambda p: (str(p.parent), int(str(p.name)[:-4])))]
-
-        corpus: List[str] = []
-        for sample in self.samples:
-            with sample.open() as data_file:
-                data: ClipData = json.load(data_file)
-                corpus.append(data['label'])
-        self.tokenizer: Tokenizer = get_bpe_tokenizer(corpus)
+        
+        self.tokenizer = get_tokenizer('spacy', language='es_core_news_sm')
+        UNK_IDX, PAD_IDX, BOS_IDX, EOS_IDX = 0, 1, 2, 3
+        special_symbols = ['<unk>', '<pad>', '<bos>', '<eos>']
+        self.vocab = build_vocab_from_iterator(yield_tokens(self.samples, self.tokenizer),
+                                                    min_freq=1,
+                                                    specials=special_symbols,
+                                                    special_first=True)
+        self.vocab.set_default_index(UNK_IDX)
 
         self.load_videos = load_videos
         self.load_keypoints = load_keypoints
@@ -83,11 +76,11 @@ class LSA_Dataset(VisionDataset):
             clip = self.video_transform(clip) if self.video_transform is not None else clip
             if self.frame_transform is not None:
                 clip = list(map(lambda f: self.frame_transform(f, signer['roi']), clip))
-            clip = stack(clip)
+            out_clip: Optional[Tensor] = stack(clip)
         else:
-            clip = None
+            out_clip = None
 
-        return (paths, clip, keypoints, self.tokenizer.encode(label))
+        return (paths, out_clip, keypoints, self.tokenizer(label))
     
     def __iter__(self) -> Iterator[ClipSample]:
         for i in range(self.__len__()):
