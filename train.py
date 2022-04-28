@@ -101,8 +101,6 @@ def train():
     optimizer = torch.optim.Adam(model.parameters(), lr=0.0001, betas=(0.9, 0.98), eps=1e-9)
     collate_fn = get_collate_fn(dataset.vocab.__getitem__("<pad>"))
 
-    train_epoch(model, optimizer, dataset, batch_size, collate_fn, loss_fn, DEVICE)
-
     NUM_EPOCHS = 2
 
     for epoch in range(1, NUM_EPOCHS+1):
