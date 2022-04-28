@@ -19,11 +19,8 @@ class KeypointsEmbedding(nn.Module):
         self.conv1d = nn.Conv1d(in_channels=keys_initial_emb_size, out_channels=emb_size, kernel_size=kernel_size)
         
 
-    def forward(self, src: List[Tensor]):
-        # flatten and apply fc frame by frame, then stack the frames and permute dims for conv
-        src_emb = stack([relu(self.fc(torch.flatten(frame))) for frame in src]).permute(1,0)
-        # unsqueeze adds dimention representing the batch CHEQUEAR
-        src_emb = self.conv1d(src_emb.unsqueeze(0))[0].permute(1,0)
-        # unsqueeze adds dimention representing the batch CHEQUEAR
-        src_emb = src_emb.unsqueeze(1)
+    def forward(self, src_batch: List[List[Tensor]]):
+        # flatten and apply fc frame by frame, then stack the frames and permute dims for conv; this for each sample in batch
+        src_emb = stack([stack([relu(self.fc(torch.flatten(frame))) for frame in each]).permute(1,0) for each in src_batch])
+        src_emb = self.conv1d(src_emb)
         return src_emb

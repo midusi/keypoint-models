@@ -1,9 +1,7 @@
 from typing import List
 from torch import Tensor, nn
 
-from model.modules.KeypointsEmbedding import KeypointsEmbedding
-from model.modules.PositionalEncoding import PositionalEncoding
-from model.modules.TokenEmbedding import TokenEmbedding
+from .modules import KeypointsEmbedding, PositionalEncoding, TokenEmbedding
 
 
 class KeypointModel(nn.Module):
@@ -36,7 +34,7 @@ class KeypointModel(nn.Module):
                 src_padding_mask: Tensor,
                 tgt_padding_mask: Tensor,
                 memory_key_padding_mask: Tensor):
-        src_emb = self.src_pe(self.keys_emb(src))
+        src_emb = self.src_pe(self.keys_emb(src).permute(2,0,1)) # changes shape to (Len, Batch, Emb)
         tgt_emb = self.tgt_pe(self.tgt_tok_emb(tgt))
         outs = self.transformer(src_emb, tgt_emb, src_mask, tgt_mask, None,
                                 src_padding_mask, tgt_padding_mask, memory_key_padding_mask)

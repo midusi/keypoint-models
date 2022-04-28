@@ -1,4 +1,4 @@
-from typing import Optional, Sequence, Tuple, TypedDict, List, TypeVar
+from typing import Optional, Sequence, Tuple, TypedDict, List, TypeVar, Union
 from pathlib import Path
 from torch import Tensor
 from tokenizers import Encoding
@@ -34,8 +34,6 @@ class SignerData(TypedDict):
     keypoints: List[KeypointData]
 
 ClipSample = Tuple[
-    dict[str, Path],
     Optional[Tensor],
     Optional[Sequence[KEYPOINT_FORMAT]],
-    Encoding]
-    # Encoding docs: https://huggingface.co/docs/tokenizers/python/latest/api/reference.html#tokenizers.Encoding
+    Union[List[int], Tensor]]
