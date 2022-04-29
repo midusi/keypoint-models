@@ -1,3 +1,4 @@
+from pathlib import Path
 from timeit import default_timer as timer
 
 import torch
@@ -27,7 +28,10 @@ def train_epoch(model, optimizer, dataset, batch_size, collate_fn, loss_fn, devi
     losses = 0
     train_dataloader = DataLoader(dataset, batch_size=batch_size, collate_fn=collate_fn, shuffle=True)
 
-    for src, tgt in train_dataloader:
+    for i, (src, tgt) in enumerate(train_dataloader):
+        print(i, len(train_dataloader))
+        if i != 205:
+            continue
         src = [[frame.to(device) for frame in each] for each in src]
         #src = src.to(device)
         tgt = tgt.to(device)
@@ -56,7 +60,8 @@ def evaluate(model, dataset, batch_size, collate_fn, loss_fn, device):
     val_dataloader = DataLoader(dataset, batch_size=batch_size, collate_fn=collate_fn, shuffle=True)
 
     for src, tgt in val_dataloader:
-        src = src.to(device)
+        src = [[frame.to(device) for frame in each] for each in src]
+        #src = src.to(device)
         tgt = tgt.to(device)
 
         tgt_input = tgt[:-1, :]
@@ -76,9 +81,11 @@ def train():
     load_videos = False
     load_keypoints = True
     max_frames = 75
-    batch_size = 64
+    batch_size = 128
     keypoints_to_use = [i for i in range(94, 136)]
     DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+    CHECKPOINT_PATH = Path("checkpoints/")
+    CHECKPOINT_PATH.mkdir(exist_ok=True)
 
     dataset = LSA_Dataset(
         root,
@@ -107,7 +114,14 @@ def train():
         start_time = timer()
         train_loss = train_epoch(model, optimizer, dataset, batch_size, collate_fn, loss_fn, DEVICE)
         end_time = timer()
-        val_loss = evaluate(model)
+        val_loss = evaluate(model, dataset, batch_size, collate_fn, loss_fn, DEVICE)
         print((f"Epoch: {epoch}, Train loss: {train_loss:.3f}, Val loss: {val_loss:.3f}, "f"Epoch time = {(end_time - start_time):.3f}s"))
+        torch.save({
+            'epoch': epoch,
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'train_loss': train_loss,
+            'val_loss': val_loss,
+            }, CHECKPOINT_PATH)
 
 train()
