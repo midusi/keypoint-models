@@ -1,12 +1,12 @@
 from math import ceil
 
-from typing import Sequence, List, Callable
-from type_hints import Box, T, KeypointData
-
+from typing import Sequence, List, Callable, Tuple
 import torch
 from torch import Tensor
 from torchvision.transforms.functional import crop, resize
 
+from type_hints import Box, T, KeypointData
+from helpers.get_keypoints_centers import get_keypoints_centers
 
 def get_roi_selector_transform(height: int, width: int) -> Callable[[Tensor, Box], Tensor]:
     '''Given height and width, returns a frame-level transform that crops a given roi from the frame and resizes it to to the desired values keeping the aspect ratio and padding with zeros if necessary'''
@@ -42,6 +42,20 @@ def get_keypoint_format_transform(keypoints_to_use: List[int]) -> Callable[[Keyp
             k for j,k in enumerate(keypoint_data['keypoints']) if (j%3) == i and int(j/3) in keypoints_to_use
         ] for i in range(3)])
     return keypoint_format_transform
+
+def keypoint_norm_to_center_transform(keypoints: List[KeypointData]) -> List[KeypointData]:
+    centers = get_keypoints_centers(keypoints)
+    keypoints_norm: List[KeypointData] = []
+    for i_frame, keypoint_data in enumerate(keypoints):
+        keypoint_norm = keypoint_data
+        keypoint_norm['keypoints'] = [
+            keypoint - centers[i_frame][0] if (i_key%3)==0 else
+            keypoint - centers[i_frame][1] if (i_key%3)==1 else
+            keypoint
+            for i_key, keypoint in enumerate(keypoint_data['keypoints'])
+        ]
+        keypoints_norm.append(keypoint_norm)
+    return keypoints_norm
 
 def get_text_to_tensor_transform(bos_idx: int, eos_idx: int) -> Callable[[List[int]], Tensor]:
     def text_to_tensor_transform(token_ids: List[int]) -> Tensor:

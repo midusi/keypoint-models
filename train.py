@@ -4,24 +4,19 @@ from timeit import default_timer as timer
 import torch
 from torch import nn
 from torch.utils.data import DataLoader
-from torch.nn.utils.rnn import pad_sequence
+from torchvision.transforms import Compose
 
 from data.LSA_Dataset import LSA_Dataset
-from data.transforms import get_frames_reduction_transform, get_keypoint_format_transform, get_text_to_tensor_transform
+from data.transforms import (
+    get_frames_reduction_transform,
+    get_keypoint_format_transform,
+    get_text_to_tensor_transform,
+    keypoint_norm_to_center_transform
+)
 from model.KeypointModel import KeypointModel
 from helpers.create_mask import create_mask
+from data.collate_fn import get_keypoint_model_collate_fn
 
-
-def get_collate_fn(pad_idx):
-    # function to collate data samples into batch tensors
-    def collate_fn(batch):
-        src_batch, tgt_batch = [], []
-        for clip, keypoints, label in batch:
-            src_batch.append(clip if keypoints is None else (keypoints if clip is None else (clip, keypoints)))
-            tgt_batch.append(label)
-        tgt_batch = pad_sequence(tgt_batch, padding_value=pad_idx)
-        return src_batch, tgt_batch
-    return collate_fn
 
 def train_epoch(model, optimizer, dataset, batch_size, collate_fn, loss_fn, device):
     model.train()
@@ -30,8 +25,6 @@ def train_epoch(model, optimizer, dataset, batch_size, collate_fn, loss_fn, devi
 
     for i, (src, tgt) in enumerate(train_dataloader):
         print(i, len(train_dataloader))
-        if i != 205:
-            continue
         src = [[frame.to(device) for frame in each] for each in src]
         #src = src.to(device)
         tgt = tgt.to(device)
@@ -91,14 +84,18 @@ def train():
         root,
         load_videos = load_videos,
         load_keypoints = load_keypoints,
-        keypoints_transform = get_frames_reduction_transform(max_frames),
+        keypoints_transform = Compose([
+            keypoint_norm_to_center_transform,
+            get_frames_reduction_transform(max_frames)
+        ]),
         keypoints_transform_each = get_keypoint_format_transform(keypoints_to_use)
         )
     dataset.label_transform = get_text_to_tensor_transform(dataset.vocab.__getitem__("<bos>"), dataset.vocab.__getitem__("<eos>"))
     
     torch.manual_seed(0)
 
-    model = KeypointModel(max_frames, dataset.max_seq_len, len(keypoints_to_use), len(dataset.vocab)).to(DEVICE)
+    # adds 2 to max_seq_len for <bos> and <eos> tokens
+    model = KeypointModel(max_frames, dataset.max_seq_len + 2, len(keypoints_to_use), len(dataset.vocab)).to(DEVICE)
 
     for p in model.parameters():
         if p.dim() > 1:
@@ -106,7 +103,7 @@ def train():
 
     loss_fn = torch.nn.CrossEntropyLoss(ignore_index=dataset.vocab.__getitem__("<pad>"))
     optimizer = torch.optim.Adam(model.parameters(), lr=0.0001, betas=(0.9, 0.98), eps=1e-9)
-    collate_fn = get_collate_fn(dataset.vocab.__getitem__("<pad>"))
+    collate_fn = get_keypoint_model_collate_fn(dataset.vocab.__getitem__("<pad>"))
 
     NUM_EPOCHS = 2
 

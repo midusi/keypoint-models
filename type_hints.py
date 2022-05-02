@@ -1,7 +1,5 @@
 from typing import Optional, Sequence, Tuple, TypedDict, List, TypeVar, Union
-from pathlib import Path
 from torch import Tensor
-from tokenizers import Encoding
 
 
 T = TypeVar('T')
@@ -37,3 +35,8 @@ ClipSample = Tuple[
     Optional[Tensor],
     Optional[Sequence[KEYPOINT_FORMAT]],
     Union[List[int], Tensor]]
+
+KeypointModelSample = Tuple[
+    List[Tensor],
+    Tensor
+]
