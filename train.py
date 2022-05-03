@@ -121,7 +121,7 @@ def train():
     optimizer = torch.optim.Adam(model.parameters(), lr=0.0001, betas=(0.9, 0.98), eps=1e-9)
     collate_fn = get_keypoint_model_collate_fn(dataset.vocab.__getitem__("<pad>"))
 
-    NUM_EPOCHS = 10
+    NUM_EPOCHS = 20
     train_loss_hist, val_loss_hist = [], []
     for epoch in range(1, NUM_EPOCHS+1):
         start_time = timer()
@@ -139,6 +139,6 @@ def train():
             'val_loss': val_loss,
             'train_loss_hist': train_loss_hist,
             'val_loss_hist': val_loss_hist
-            }, CHECKPOINT_PATH)
+            }, CHECKPOINT_PATH / "checkpoint.tar")
 
 train()
