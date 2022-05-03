@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from typing import Sequence, List, Iterator, Callable, Optional, Generator
+from typing import List, Iterator, Callable, Optional, Generator, Literal
 from type_hints import ClipData, ClipSample, SignerData, KeypointData, T, KEYPOINT_FORMAT
 
 from torch import stack, Tensor
@@ -12,6 +12,15 @@ from torchtext.vocab import build_vocab_from_iterator
 
 from helpers.get_clip_paths import get_clip_paths
 
+
+def get_test_videos(samples: List[str]) -> List[str]:
+    ecologia = list(set([v for v in samples if "episodio" in v]))
+    resumen_semanal = list(set([v for v in samples if "resumen-semanal" in v]))
+    test_videos = [
+            "lsa-noticias-en-lengua-de-senas-argentina-programa-especial-20062021",
+            "ultimo-momento-reconocimiento-la-lengua-de-senas-chilena-como-lengua-oficial-de-las-personas-sordas"
+        ] + ecologia[:2] + resumen_semanal[:8]
+    return test_videos
 
 def yield_tokens(samples: List[Path], tokenizer) -> Generator:
     for sample in samples:
@@ -25,6 +34,7 @@ class LSA_Dataset(VisionDataset):
         root: str,
         load_videos = True,
         load_keypoints = True,
+        mode: Literal["train", "test"] = "train",
         frame_transform: Optional[Callable[[Tensor], Tensor]] = None,
         video_transform: Optional[Callable[[List[Tensor]], List[Tensor]]] = None,
         keypoints_transform: Optional[Callable[[List[KeypointData]], List[KeypointData]]] = None,
@@ -33,10 +43,18 @@ class LSA_Dataset(VisionDataset):
         ) -> None:
 
         super().__init__(root)
+        self.mode = mode
 
-        # samples stores metadata's file path for all samples
-        self.samples = [(clip.parent / (clip.name[:-3] + 'json')) for clip in sorted(Path(root).glob('**/*.mp4'), key=lambda p: (str(p.parent), int(str(p.name)[:-4])))]
-        
+        all_samples = [(clip.parent / (clip.name[:-3] + 'json')) for clip in
+            sorted(Path(root).glob('**/*.mp4'), key=lambda p: (str(p.parent), int(str(p.name)[:-4])))]
+        test_samples = get_test_videos([str(clip.parent.name) for clip in all_samples])
+        # samples stores metadata's file path for train/test samples
+        self.samples = [sample for sample in all_samples
+            if (str(sample.parent.name) in test_samples and self.mode == "test") or 
+                (str(sample.parent.name) not in test_samples and self.mode == "train")]
+        test = set([str(sample.parent.name) for sample in all_samples if(str(sample.parent.name) in test_samples)])
+        train = set([str(sample.parent.name) for sample in all_samples if(str(sample.parent.name) not in test_samples)])
+
         self.tokenizer: Callable[[str], List[str]] = get_tokenizer('spacy', language='es_core_news_sm')
         special_symbols = ['<unk>', '<pad>', '<bos>', '<eos>']
         self.vocab = build_vocab_from_iterator(yield_tokens(self.samples, self.tokenizer),
