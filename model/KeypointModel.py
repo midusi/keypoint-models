@@ -41,7 +41,8 @@ class KeypointModel(nn.Module):
         return self.generator(outs)
 
     def encode(self, src: Tensor, src_mask: Tensor):
-        return self.transformer.encoder(self.src_pe(self.keys_emb(src)), src_mask)
+        src_emb = self.src_pe(self.keys_emb(src).permute(2,0,1))
+        return self.transformer.encoder(src_emb, src_mask)
 
     def decode(self, tgt: Tensor, memory: Tensor, tgt_mask: Tensor):
         return self.transformer.decoder(self.tgt_pe(self.tgt_tok_emb(tgt)), memory, tgt_mask)

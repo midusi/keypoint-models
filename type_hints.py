@@ -1,4 +1,4 @@
-from typing import Optional, Sequence, Tuple, TypedDict, List, TypeVar, Union
+from typing import Dict, Optional, Sequence, Tuple, TypedDict, List, TypeVar, Union, OrderedDict
 from torch import Tensor
 
 
@@ -30,6 +30,15 @@ class SignerData(TypedDict):
     scores: List[float]
     roi: Box
     keypoints: List[KeypointData]
+
+class ModelCheckpoint(TypedDict):
+    epoch: int
+    model_state_dict: OrderedDict[str, Tensor]
+    optimizer_state_dict: Dict
+    train_loss: float
+    val_loss: float
+    train_loss_hist: List[float]
+    val_loss_hist: List[float]
 
 ClipSample = Tuple[
     Optional[Tensor],

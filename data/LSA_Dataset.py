@@ -1,8 +1,9 @@
+from dataclasses import replace
 import json
 from pathlib import Path
 
-from typing import List, Iterator, Callable, Optional, Generator, Literal
-from type_hints import ClipData, ClipSample, SignerData, KeypointData, T, KEYPOINT_FORMAT
+from typing import List, Iterator, Callable, Optional, Generator, Literal, Tuple
+from type_hints import ClipData, ClipSample, SignerData, KeypointData, KEYPOINT_FORMAT
 
 from torch import stack, Tensor
 from torchvision.io import VideoReader
@@ -13,14 +14,14 @@ from torchtext.vocab import build_vocab_from_iterator
 from helpers.get_clip_paths import get_clip_paths
 
 
-def get_test_videos(samples: List[str]) -> List[str]:
-    ecologia = list(set([v for v in samples if "episodio" in v]))
-    resumen_semanal = list(set([v for v in samples if "resumen-semanal" in v]))
-    test_videos = [
-            "lsa-noticias-en-lengua-de-senas-argentina-programa-especial-20062021",
-            "ultimo-momento-reconocimiento-la-lengua-de-senas-chilena-como-lengua-oficial-de-las-personas-sordas"
-        ] + ecologia[:2] + resumen_semanal[:8]
-    return test_videos
+def split_train_test(samples: List[Path]) -> Tuple[List[Path], List[Path]]:
+    # only videos from "resumen semanal" playlist are used
+    test_videos = sorted([video for video in {sample.parent.name for sample in samples} if "resumen-semanal" in video])[-8:]
+    test_samples: List[Path] = []
+    train_samples: List[Path] = []
+    for sample in sorted(filter(lambda s: "resumen-semanal" in s.parent.name, samples)):
+        (train_samples, test_samples)[str(sample.parent.name) in test_videos].append(sample)
+    return (train_samples, test_samples)
 
 def yield_tokens(samples: List[Path], tokenizer) -> Generator:
     for sample in samples:
@@ -45,25 +46,20 @@ class LSA_Dataset(VisionDataset):
         super().__init__(root)
         self.mode = mode
 
+        # samples stores metadata's file path for train/test samples
         all_samples = [(clip.parent / (clip.name[:-3] + 'json')) for clip in
             sorted(Path(root).glob('**/*.mp4'), key=lambda p: (str(p.parent), int(str(p.name)[:-4])))]
-        test_samples = get_test_videos([str(clip.parent.name) for clip in all_samples])
-        # samples stores metadata's file path for train/test samples
-        self.samples = [sample for sample in all_samples
-            if (str(sample.parent.name) in test_samples and self.mode == "test") or 
-                (str(sample.parent.name) not in test_samples and self.mode == "train")]
-        test = set([str(sample.parent.name) for sample in all_samples if(str(sample.parent.name) in test_samples)])
-        train = set([str(sample.parent.name) for sample in all_samples if(str(sample.parent.name) not in test_samples)])
+        self.train_samples, self.test_samples = split_train_test(all_samples)
 
-        self.tokenizer: Callable[[str], List[str]] = get_tokenizer('spacy', language='es_core_news_sm')
+        self.tokenizer: Callable[[str], List[str]] = get_tokenizer('spacy', language='es_core_news_lg')
         special_symbols = ['<unk>', '<pad>', '<bos>', '<eos>']
-        self.vocab = build_vocab_from_iterator(yield_tokens(self.samples, self.tokenizer),
+        self.vocab = build_vocab_from_iterator(yield_tokens(self.train_samples, self.tokenizer),
                                                 min_freq=1,
                                                 specials=special_symbols,
                                                 special_first=True)
         # by default returns <unk> index
         self.vocab.set_default_index(0)
-        self.max_seq_len = max(map(len, yield_tokens(self.samples, self.tokenizer)))
+        self.max_tgt_len = max(map(len, yield_tokens(all_samples, self.tokenizer)))
 
         self.load_videos = load_videos
         self.load_keypoints = load_keypoints
@@ -74,10 +70,10 @@ class LSA_Dataset(VisionDataset):
         self.label_transform = label_transform
 
     def __len__(self) -> int:
-        return len(self.samples)
+        return len(self.train_samples if self.mode == "train" else self.test_samples)
 
     def __getitem__(self, index: int) -> ClipSample:
-        paths = get_clip_paths(self.samples[index])
+        paths = get_clip_paths((self.train_samples if self.mode == "train" else self.test_samples)[index])
         with paths['json'].open() as data_file:
             data: ClipData = json.load(data_file)
         # label stores a list of the token indices for the corresponding label
@@ -106,3 +102,6 @@ class LSA_Dataset(VisionDataset):
     def __iter__(self) -> Iterator[ClipSample]:
         for i in range(self.__len__()):
             yield self.__getitem__(i)
+    
+    def get_token_idx(self, token: str) -> int:
+        return self.vocab.__getitem__(token)
