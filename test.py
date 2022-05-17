@@ -36,13 +36,10 @@ dataset = LSA_Dataset(
 dataset.label_transform = get_text_to_tensor_transform(dataset.vocab.__getitem__("<bos>"), dataset.vocab.__getitem__("<eos>"))
 
 model = KeypointModel(max_frames, dataset.max_tgt_len + 2, len(keypoints_to_use), len(dataset.vocab)).to(DEVICE)
-optimizer = torch.optim.Adam(model.parameters(), lr=0.0001, betas=(0.9, 0.98), eps=1e-9)
 
-#checkpoint = torch.load(CHECKPOINT_PATH / "checkpoint.tar")
-#model.load_state_dict(checkpoint['model_state_dict'])
-#optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-#epoch = checkpoint['epoch']
-#loss = checkpoint['loss']
+checkpoint = torch.load(CHECKPOINT_PATH / "checkpoint_20_epochs.tar")
+model.load_state_dict(checkpoint['model_state_dict'])
+epoch = checkpoint['epoch']
 
 res = translate(model, dataset.__getitem__(5)[1], dataset, DEVICE)
 print(res)

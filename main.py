@@ -68,7 +68,7 @@ def __main__():
         model = KeypointModel(max_frames, train_dataset.max_tgt_len + 2, len(keypoints_to_use), len(train_dataset.vocab)).to(DEVICE)
         model.load_state_dict(checkpoint['model_state_dict'])
 
-    checkpoint = train(train_dataset, test_dataset, model, 1, batch_size, DEVICE, checkpoint)
+    checkpoint = train(train_dataset, test_dataset, model, 2, batch_size, DEVICE, checkpoint)
 
     torch.save(checkpoint, CHECKPOINT_PATH / f"checkpoint_{checkpoint['epoch']}_epochs.tar")
 
