@@ -1,57 +1,51 @@
-from dataclasses import replace
 import json
 from pathlib import Path
 
-from typing import List, Iterator, Callable, Optional, Generator, Literal, Tuple
+from typing import Callable, Optional, Generator, Literal, Union, Iterator
 from type_hints import ClipData, ClipSample, SignerData, KeypointData, KEYPOINT_FORMAT
 
 from torch import stack, Tensor
+from torch.utils.data import Dataset
 from torchvision.io import VideoReader
-from torchvision.datasets import VisionDataset
 from torchtext.data.utils import get_tokenizer
 from torchtext.vocab import build_vocab_from_iterator
 
 from helpers.get_clip_paths import get_clip_paths
+from data.train_test_helpers import split_train_test, load_train_test, store_samples_to_csv
 
 
-def split_train_test(samples: List[Path]) -> Tuple[List[Path], List[Path]]:
-    # only videos from "resumen semanal" playlist are used
-    test_videos = sorted([video for video in {sample.parent.name for sample in samples} if "resumen-semanal" in video])[-8:]
-    test_samples: List[Path] = []
-    train_samples: List[Path] = []
-    for sample in sorted(filter(lambda s: "resumen-semanal" in s.parent.name, samples)):
-        (train_samples, test_samples)[str(sample.parent.name) in test_videos].append(sample)
-    return (train_samples, test_samples)
-
-def yield_tokens(samples: List[Path], tokenizer) -> Generator:
+def yield_tokens(samples: list[Path], tokenizer: Callable[[str], list[str]]) -> Generator[list[str], None, None]:
     for sample in samples:
         with sample.open() as data_file:
             data: ClipData = json.load(data_file)
             yield tokenizer(data['label'])
 
-class LSA_Dataset(VisionDataset):
+class LSA_Dataset(Dataset):
 
     def __init__(self,
-        root: str,
-        load_videos = True,
-        load_keypoints = True,
-        mode: Literal["train", "test"] = "train",
-        frame_transform: Optional[Callable[[Tensor], Tensor]] = None,
-        video_transform: Optional[Callable[[List[Tensor]], List[Tensor]]] = None,
-        keypoints_transform: Optional[Callable[[List[KeypointData]], List[KeypointData]]] = None,
-        keypoints_transform_each: Optional[Callable[[KeypointData], KEYPOINT_FORMAT]] = None,
-        label_transform: Optional[Callable[[List[int]], Tensor]] = None
+            root: str,
+            mode: Literal["train", "test"],
+            load_videos: bool = True,
+            load_keypoints: bool = True,
+            use_only_res: bool = False,
+            label_as_idx: bool = True,
+            frame_transform: Optional[Callable[[Tensor], Tensor]] = None,
+            video_transform: Optional[Callable[[list[Tensor]], list[Tensor]]] = None,
+            keypoints_transform: Optional[Callable[[list[KeypointData]], list[KeypointData]]] = None,
+            keypoints_transform_each: Optional[Callable[[KeypointData], KEYPOINT_FORMAT]] = None,
+            label_transform: Optional[Callable[[list[int]], Tensor]] = None
         ) -> None:
 
-        super().__init__(root)
         self.mode = mode
-
-        # samples stores metadata's file path for train/test samples
-        all_samples = [(clip.parent / (clip.name[:-3] + 'json')) for clip in
-            sorted(Path(root).glob('**/*.mp4'), key=lambda p: (str(p.parent), int(str(p.name)[:-4])))]
-        self.train_samples, self.test_samples = split_train_test(all_samples)
-
-        self.tokenizer: Callable[[str], List[str]] = get_tokenizer('spacy', language='es_core_news_lg')
+        train_path = Path(root) / ("train.csv" if not use_only_res else "train_res.csv")
+        test_path = Path(root) / ("test.csv" if not use_only_res else "test_res.csv")
+        if train_path.exists() and test_path.exists():
+            self.train_samples, self.test_samples = load_train_test(train_path, test_path)
+        else:
+            self.train_samples, self.test_samples = split_train_test(Path(root), use_only_res)
+            store_samples_to_csv(train_path, self.train_samples)
+            store_samples_to_csv(test_path, self.test_samples)
+        self.tokenizer: Callable[[str], list[str]] = get_tokenizer('spacy', language='es_core_news_lg')
         special_symbols = ['<unk>', '<pad>', '<bos>', '<eos>']
         self.vocab = build_vocab_from_iterator(yield_tokens(self.train_samples, self.tokenizer),
                                                 min_freq=1,
@@ -59,10 +53,10 @@ class LSA_Dataset(VisionDataset):
                                                 special_first=True)
         # by default returns <unk> index
         self.vocab.set_default_index(0)
-        self.max_tgt_len = max(map(len, yield_tokens(all_samples, self.tokenizer)))
-
+        self.max_tgt_len = max(map(len, yield_tokens(self.train_samples + self.test_samples, self.tokenizer)))
         self.load_videos = load_videos
         self.load_keypoints = load_keypoints
+        self.label_as_idx = label_as_idx
         self.frame_transform = frame_transform
         self.video_transform = video_transform
         self.keypoints_transform = keypoints_transform
@@ -77,18 +71,20 @@ class LSA_Dataset(VisionDataset):
         with paths['json'].open() as data_file:
             data: ClipData = json.load(data_file)
         # label stores a list of the token indices for the corresponding label
-        label: List[int] = self.vocab(self.tokenizer(data['label']))
+        label: Union[list[str], list[int]] = self.tokenizer(data['label'])
+        if self.label_as_idx:
+            label = self.vocab(label)
 
         with paths['signer'].open() as signer_file:
             signer: SignerData = json.load(signer_file)
         
         if self.load_keypoints:
-            keypoints = self.keypoints_transform(signer['keypoints']) if self.keypoints_transform is not None else signer['keypoints']
             if self.keypoints_transform_each is not None:
-                keypoints = list(map(self.keypoints_transform_each, keypoints))
+                keypoints = list(map(self.keypoints_transform_each, signer['keypoints']))
+            keypoints = self.keypoints_transform(keypoints) if self.keypoints_transform is not None else keypoints
                 
         if self.load_videos:
-            clip: List[Tensor] = list(map(lambda frame: frame['data'], VideoReader(str(paths['mp4']), "video")))
+            clip: list[Tensor] = list(map(lambda frame: frame['data'], VideoReader(str(paths['mp4']), "video")))
             clip = self.video_transform(clip) if self.video_transform is not None else clip
             if self.frame_transform is not None:
                 clip = list(map(lambda f: self.frame_transform(f, signer['roi']), clip))

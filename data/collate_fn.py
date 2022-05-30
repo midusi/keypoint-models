@@ -17,8 +17,8 @@ def get_keypoint_model_collate_fn(pad_idx: int) -> Callable[[List[ClipSample]], 
             for frame in keypoints:
                 xs = torch.cat([xs, frame[0]])
                 ys = torch.cat([ys, frame[1]])
-        keypoint_mean = Tensor([[torch.mean(xs)],[torch.mean(ys)],[0]])
-        keypoint_std = Tensor([[torch.std(xs)],[torch.std(ys)],[1]])
+        keypoint_mean = Tensor([[torch.mean(xs)],[torch.mean(ys)]])
+        keypoint_std = Tensor([[torch.std(xs)],[torch.std(ys)]])
         src_batch = list(map(lambda keypoints: [(frame-keypoint_mean)/keypoint_std for frame in keypoints], src_batch))
         tgt_batch = pad_sequence(tgt_batch, padding_value=pad_idx)
         return src_batch, tgt_batch

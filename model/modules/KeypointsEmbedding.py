@@ -15,9 +15,8 @@ class KeypointsEmbedding(nn.Module):
         super(KeypointsEmbedding, self).__init__()
 
         # in_features is the result of flattening the input of (x,y,c).(k1, ..., k42)
-        self.fc = nn.Linear(in_features=keys_amount*3, out_features=keys_initial_emb_size)
+        self.fc = nn.Linear(in_features=keys_amount*2, out_features=keys_initial_emb_size)
         self.conv1d = nn.Conv1d(in_channels=keys_initial_emb_size, out_channels=emb_size, kernel_size=kernel_size)
-        
 
     def forward(self, src_batch: List[List[Tensor]]):
         # flatten and apply fc frame by frame, then stack the frames and permute dims for conv; this for each sample in batch

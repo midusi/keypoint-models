@@ -86,14 +86,13 @@ def train(
         end_time = timer()
         val_loss = evaluate(model, validation_dataset, batch_size, collate_fn, loss_fn, device)
         val_loss_hist.append(val_loss)
-        print((f"Epoch: {epoch}, Train loss: {train_loss:.3f}, Val loss: {val_loss:.3f}, "f"Epoch time = {(end_time - start_time):.3f}s"))
-        checkpoint = {
-            'epoch': checkpoint['epoch'] + 1 if checkpoint is not None else epoch,
-            'model_state_dict': model.state_dict(),
-            'optimizer_state_dict': optimizer.state_dict(),
-            'train_loss': train_loss,
-            'val_loss': val_loss,
-            'train_loss_hist': train_loss_hist,
-            'val_loss_hist': val_loss_hist
-            }
-    return checkpoint
+        print((f"Epoch: {checkpoint['epoch'] + epoch if checkpoint is not None else epoch}, Train loss: {train_loss:.3f}, Val loss: {val_loss:.3f}, "f"Epoch time = {(end_time - start_time):.3f}s"))
+    return {
+        'epoch': checkpoint['epoch'] + num_epochs if checkpoint is not None else num_epochs,
+        'model_state_dict': model.state_dict(),
+        'optimizer_state_dict': optimizer.state_dict(),
+        'train_loss': train_loss,
+        'val_loss': val_loss,
+        'train_loss_hist': train_loss_hist,
+        'val_loss_hist': val_loss_hist
+    }
