@@ -1,15 +1,18 @@
+import csv
 from pathlib import Path
 from math import ceil, floor
-import csv
+from typing import Callable
 
 
-def split_train_test(path: Path, use_only_res: bool = False) -> tuple[list[Path], list[Path]]:
+def split_train_test(path: Path, filter_sample: Callable[[Path], bool] = lambda x: True) -> tuple[list[Path], list[Path]]:
     '''From root of the database builds train and test sets'''
-    video_paths = [video for playlist in path.glob('**/*') for video in playlist.glob('**/*') if (not use_only_res or "resumen_semanal" in playlist.name)]
+    video_paths = [video for playlist in path.glob('**/*') for video in playlist.glob('**/*')]
     train_samples: list[Path] = []
     test_samples: list[Path] = []
     for video in video_paths:
-        clips = list(map(lambda vid_path: Path(str(vid_path.resolve())[:-3] + "json"), video.glob('**/*.mp4')))
+        clips = list(
+            filter(filter_sample,
+            map(lambda vid_path: Path(str(vid_path.resolve())[:-3] + "json"), video.glob('**/*.mp4'))))
         train_samples += clips[:ceil(len(clips) * 0.8)]
         test_samples += clips[-floor(len(clips) * 0.2):]
     return (train_samples, test_samples)

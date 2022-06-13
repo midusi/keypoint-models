@@ -36,5 +36,5 @@ def translate(model: torch.nn.Module, src: List[Tensor], dataset: LSA_Dataset, d
     src_mask_len = model.src_pe.pos_embedding.shape[0]
     src_mask = (torch.zeros(src_mask_len, src_mask_len)).type(torch.bool)
     tgt_tokens = greedy_decode(
-        model, src, src_mask, dataset.max_tgt_len, dataset.get_token_idx('<bos>'), dataset.get_token_idx('<eos>'), device).flatten()
+        model, src, src_mask, dataset.max_label_len, dataset.get_token_idx('<bos>'), dataset.get_token_idx('<eos>'), device).flatten()
     return " ".join(dataset.vocab.lookup_tokens(list(tgt_tokens.cpu().numpy()))).replace("<bos>", "").replace("<eos>", "")
